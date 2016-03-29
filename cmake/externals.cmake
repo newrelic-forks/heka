@@ -175,7 +175,7 @@ if (INCLUDE_GEOIP)
 endif()
 
 if (INCLUDE_DOCKER_PLUGINS)
-    git_clone(https://github.com/fsouza/go-dockerclient 175e1df973274f04e9b459a62cffc49808f1a649)
+    git_clone(https://github.com/fsouza/go-dockerclient 4ac6ea1aa6ee9be15e66aa694c4b3f909df239f4)
 endif()
 
 if (INCLUDE_MOZSVC)
