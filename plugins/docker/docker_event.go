@@ -69,14 +69,20 @@ func (dei *DockerEventInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelpe
 			pack.Message.SetLogger(event.ID)
 			pack.Message.SetHostname(hostname)
 
-			payload := fmt.Sprintf("id:%s status:%s from:%s time:%d", event.ID, event.Status, event.From, event.Time)
+			payload := fmt.Sprintf("%s %s %s", event.Action, event.Type, event.Actor.Attributes["Image"])
 			pack.Message.SetPayload(payload)
-			pack.Message.SetTimestamp(time.Now().UnixNano())
+			if event.TimeNano == 0 {
+				pack.Message.SetTimestamp(time.Now().UnixNano())
+			} else {
+				pack.Message.SetTimestamp(event.TimeNano)
+			}
 			pack.Message.SetUuid(uuid.NewRandom())
-			message.NewStringField(pack.Message, "ID", event.ID)
-			message.NewStringField(pack.Message, "Status", event.Status)
-			message.NewStringField(pack.Message, "From", event.From)
-			message.NewInt64Field(pack.Message, "Time", event.Time, "ts")
+			message.NewStringField(pack.Message, "action", event.Action)
+			message.NewStringField(pack.Message, "type", event.Type)
+			message.NewStringField(pack.Message, "id", event.Actor.ID)
+			for k, v := range event.Actor.Attributes {
+				message.NewStringField(pack.Message, k, v)
+			}
 			ir.Deliver(pack)
 		case err = <-dei.stopChan:
 			ok = false
