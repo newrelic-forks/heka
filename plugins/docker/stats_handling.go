@@ -183,9 +183,6 @@ func (m *StatsManager) statsAttach(id string, client DockerClient) error {
 			Done:   done,
 		})
 
-		// Once it has exited, close our pipes
-		close(statsrd)
-		close(done)
 		if err != nil {
 			failure <- err
 		}
