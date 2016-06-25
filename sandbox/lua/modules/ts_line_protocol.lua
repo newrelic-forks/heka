@@ -192,7 +192,7 @@ local function points_tags_tables(config)
             end
         end
     else
-        return 0
+        return {}, {}
     end
 
     return points, tags
