@@ -184,7 +184,7 @@ endif()
     git_clone(https://github.com/Sirupsen/logrus master)
     git_clone(https://github.com/docker/engine-api master)
     git_clone(https://github.com/opencontainers/runc master)
-    git_clone(https://github.com/golang/net master)
+    git_clone(https://golang.org/x/net/context master)
 
 if (INCLUDE_MOZSVC)
     #git_clone(https://github.com/bitly/go-simplejson ec501b3f691bcc79d97caf8fdf28bcf136efdab8)
