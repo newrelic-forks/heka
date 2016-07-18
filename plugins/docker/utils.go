@@ -29,7 +29,7 @@ import(
 	"time"
 	"path/filepath"
 	. "github.com/mozilla-services/heka/pipeline"
-	"github.com/fsouza/go-dockerclient"
+	"github.com/newrelic-forks/go-dockerclient"
 )
 
 
