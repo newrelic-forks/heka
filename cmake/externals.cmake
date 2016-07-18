@@ -181,6 +181,11 @@ endif()
     git_clone(https://github.com/docker/go-units master)
     git_clone(https://github.com/hashicorp/go-cleanhttp master)
 
+    git_clone(https://github.com/Sirupsen/logrus)
+    git_clone(https://github.com/docker/engine-api)
+    git_clone(https://github.com/opencontainers/runc)
+    git_clone(https://golang.org/x/net/context)
+
 if (INCLUDE_MOZSVC)
     #git_clone(https://github.com/bitly/go-simplejson ec501b3f691bcc79d97caf8fdf28bcf136efdab8)
     git_clone(https://github.com/AdRoll/goamz e0af8b0b22517e9fb1d6a4438fa8269c3e834d2d)
