@@ -28,13 +28,16 @@ import (
 
 type DockerLogInputConfig struct {
 	// A Docker endpoint.
-	Endpoint         string   `toml:"endpoint"`
-	CertPath         string   `toml:"cert_path"`
-	SincePath        string   `toml:"since_path"`
-	SinceInterval    string   `toml:"since_interval"`
-	NameFromEnv      string   `toml:"name_from_env_var"`
-	FieldsFromEnv    []string `toml:"fields_from_env"`
-	FieldsFromLabels []string `toml:"fields_from_labels"`
+	Endpoint         string        `toml:"endpoint"`
+	CertPath         string        `toml:"cert_path"`
+	SincePath        string        `toml:"since_path"`
+	SinceInterval    string        `toml:"since_interval"`
+	NameFromEnv      string        `toml:"name_from_env_var"`
+	FieldsFromEnv    []string      `toml:"fields_from_env"`
+	FieldsFromLabels []string      `toml:"fields_from_labels"`
+	RateLimitEvery   time.Duration `toml:"rate_limit_every"`
+	RateLimitBurst   int           `toml:"rate_limit_burst"`
+	RateLimitBufSize int           `toml:"rate_limit_buf_size"`
 }
 
 type DockerLogInput struct {
@@ -107,6 +110,9 @@ func (di *DockerLogInput) Init(config interface{}) error {
 		conf.FieldsFromLabels,
 		sincePath,
 		sinceInterval,
+		conf.RateLimitEvery,
+		conf.RateLimitBurst,
+		conf.RateLimitBufSize,
 	)
 	if err != nil {
 		return fmt.Errorf("DockerLogInput: failed to attach: %s", err.Error())

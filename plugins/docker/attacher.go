@@ -34,9 +34,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/newrelic-forks/go-dockerclient"
+	"github.com/actaeon/ratelimit"
+	"golang.org/x/time/rate"
 	"github.com/mozilla-services/heka/message"
 	. "github.com/mozilla-services/heka/pipeline"
+	"github.com/newrelic-forks/go-dockerclient"
 	"github.com/pborman/uuid"
 )
 
@@ -59,12 +61,17 @@ type AttachManager struct {
 	sinces           *sinces
 	sinceLock        sync.Mutex
 	sinceInterval    time.Duration
+	rateLimitEvery   time.Duration
+	rateLimitBurst   int
+	rateLimitBufSize int
 }
 
 // Construct an AttachManager and set up the Docker Client
 func NewAttachManager(endpoint string, certPath string, nameFromEnv string,
 	fieldsFromEnv []string, fieldsFromLabels []string,
-	sincePath string, sinceInterval time.Duration) (*AttachManager, error) {
+	sincePath string, sinceInterval time.Duration,
+	rateLimitEvery time.Duration, rateLimitBurst int,
+	rateLimitBufSize int) (*AttachManager, error) {
 
 	client, err := newDockerClient(certPath, endpoint)
 	if err != nil {
@@ -80,6 +87,9 @@ func NewAttachManager(endpoint string, certPath string, nameFromEnv string,
 		sincePath:        sincePath,
 		sinces:           &sinces{},
 		sinceInterval:    sinceInterval,
+		rateLimitEvery:   rateLimitEvery,
+		rateLimitBurst:   rateLimitBurst,
+		rateLimitBufSize: rateLimitBufSize,
 	}
 
 	// Initialize the sinces from the JSON since file.
@@ -250,8 +260,17 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 		return err
 	}
 
-	outrd, outwr := io.Pipe()
-	errrd, errwr := io.Pipe()
+	var outrd, errrd io.Reader
+	var outwr, errwr io.Writer
+
+	if m.rateLimitBurst != 0 && m.rateLimitEvery != 0 {
+		outrd, outwr = limit.NewRateLimiter( rate.Every(m.rateLimitEvery), m.rateLimitBurst, m.rateLimitBufSize)
+		errrd, errwr = limit.NewRateLimiter( rate.Every(m.rateLimitEvery), m.rateLimitBurst, m.rateLimitBufSize)
+
+	} else {
+		outrd, outwr = io.Pipe()
+		errrd, errwr = io.Pipe()
+	}
 
 	// Spin up one of these for each container we're watching.
 	go func() {
@@ -288,8 +307,8 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 
 		// Once it has exited, close our pipes, remove from the sinces, and (if
 		// necessary) log the error.
-		outwr.Close()
-		errwr.Close()
+		//outwr.Close()
+		//errwr.Close()
 		m.sinceLock.Lock()
 		m.sinces.Containers[id] = time.Now().Unix()
 		m.sinceLock.Unlock()
