@@ -21,30 +21,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/mozilla-services/heka/message"
 	"github.com/mozilla-services/heka/pipeline"
 )
 
 type DockerLogInputConfig struct {
 	// A Docker endpoint.
-	Endpoint         string        `toml:"endpoint"`
-	CertPath         string        `toml:"cert_path"`
-	SincePath        string        `toml:"since_path"`
-	SinceInterval    string        `toml:"since_interval"`
-	NameFromEnv      string        `toml:"name_from_env_var"`
-	FieldsFromEnv    []string      `toml:"fields_from_env"`
-	FieldsFromLabels []string      `toml:"fields_from_labels"`
-	RateLimitEvery   time.Duration `toml:"rate_limit_every"`
-	RateLimitBurst   int           `toml:"rate_limit_burst"`
-	RateLimitBufSize int           `toml:"rate_limit_buf_size"`
+	Endpoint         string   `toml:"endpoint"`
+	CertPath         string   `toml:"cert_path"`
+	SincePath        string   `toml:"since_path"`
+	SinceInterval    string   `toml:"since_interval"`
+	NameFromEnv      string   `toml:"name_from_env_var"`
+	FieldsFromEnv    []string `toml:"fields_from_env"`
+	FieldsFromLabels []string `toml:"fields_from_labels"`
+	RateLimitEvery   string   `toml:"rate_limit_every"`
+	RateLimitBurst   int      `toml:"rate_limit_burst"`
+	RateLimitBufSize int      `toml:"rate_limit_buf_size"`
 }
 
 type DockerLogInput struct {
-	stopChan  chan error
-	closer    chan struct{}
-	attachMgr *AttachManager
-	pConfig   *pipeline.PipelineConfig
+	stopChan   chan error
+	closer     chan struct{}
+	attachMgr  *AttachManager
+	pConfig    *pipeline.PipelineConfig
+	reportLock sync.Mutex
+}
+
+func (di DockerLogInput) ReportMsg(msg *message.Message) error {
+	return di.attachMgr.ReportMsg(msg)
 }
 
 func (di *DockerLogInput) SetPipelineConfig(pConfig *pipeline.PipelineConfig) {
@@ -102,6 +109,11 @@ func (di *DockerLogInput) Init(config interface{}) error {
 	di.stopChan = make(chan error)
 	di.closer = make(chan struct{})
 
+	duration, err := time.ParseDuration(conf.RateLimitEvery)
+	if err != nil {
+
+	}
+
 	m, err := NewAttachManager(
 		conf.Endpoint,
 		conf.CertPath,
@@ -110,7 +122,7 @@ func (di *DockerLogInput) Init(config interface{}) error {
 		conf.FieldsFromLabels,
 		sincePath,
 		sinceInterval,
-		conf.RateLimitEvery,
+		duration,
 		conf.RateLimitBurst,
 		conf.RateLimitBufSize,
 	)
