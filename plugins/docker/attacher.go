@@ -32,15 +32,12 @@ import (
 	"io"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/actaeon/ratelimit"
 	"github.com/mozilla-services/heka/message"
 	. "github.com/mozilla-services/heka/pipeline"
 	"github.com/newrelic-forks/go-dockerclient"
 	"github.com/pborman/uuid"
-	"golang.org/x/time/rate"
 )
 
 type sinces struct {
@@ -62,19 +59,12 @@ type AttachManager struct {
 	sinces           *sinces
 	sinceLock        sync.Mutex
 	sinceInterval    time.Duration
-	rateLimitEvery   time.Duration
-	rateLimitBurst   int
-	rateLimitBufSize int
-	rlErrMetricsMap  map[string]limit.RateLimiter
-	rlOutMetricsMap  map[string]limit.RateLimiter
 }
 
 // Construct an AttachManager and set up the Docker Client
 func NewAttachManager(endpoint string, certPath string, nameFromEnv string,
 	fieldsFromEnv []string, fieldsFromLabels []string,
-	sincePath string, sinceInterval time.Duration,
-	rateLimitEvery time.Duration, rateLimitBurst int,
-	rateLimitBufSize int) (*AttachManager, error) {
+	sincePath string, sinceInterval time.Duration) (*AttachManager, error) {
 
 	client, err := newDockerClient(certPath, endpoint)
 	if err != nil {
@@ -90,11 +80,6 @@ func NewAttachManager(endpoint string, certPath string, nameFromEnv string,
 		sincePath:        sincePath,
 		sinces:           &sinces{},
 		sinceInterval:    sinceInterval,
-		rateLimitEvery:   rateLimitEvery,
-		rateLimitBurst:   rateLimitBurst,
-		rateLimitBufSize: rateLimitBufSize,
-                rlErrMetricsMap: make(map[string]limit.RateLimiter),
-		rlOutMetricsMap: make(map[string]limit.RateLimiter),
 	}
 
 	// Initialize the sinces from the JSON since file.
@@ -110,22 +95,6 @@ func NewAttachManager(endpoint string, certPath string, nameFromEnv string,
 		return nil, fmt.Errorf("Can't decode \"since\" file '%s': %s", sincePath, err.Error())
 	}
 	return m, nil
-}
-
-func (m AttachManager) ReportMsg(msg *message.Message) (err error) {
-
-	for containerID, rateLimiter := range m.rlOutMetricsMap {
-		for metricName, metricValue := range rateLimiter.GetMetrics() {
-			message.NewInt64Field(msg, fmt.Sprintf("%s-%s", containerID, metricName), atomic.LoadInt64(&metricValue), "count")
-		}
-	}
-
-	for containerID, rateLimiter := range m.rlErrMetricsMap {
-		for metricName, metricValue := range rateLimiter.GetMetrics() {
-			message.NewInt64Field(msg, fmt.Sprintf("%s-%s", containerID, metricName), atomic.LoadInt64(&metricValue), "count")
-		}
-	}
- 	return nil
 }
 
 // Attach to all running containers
@@ -281,25 +250,8 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 		return err
 	}
 
-	var outrd, errrd io.Reader
-	var outwr, errwr io.Writer
-
-	if !(m.rateLimitEvery == 0 && m.rateLimitBurst == 0) {
-                m.ir.LogMessage("Using Rate Limiter")
-		outRl := limit.NewRateLimiter(rate.Every(m.rateLimitEvery), m.rateLimitBurst, m.rateLimitBufSize)
-		outrd = outRl
-		outwr = outRl
-
-		errRl := limit.NewRateLimiter(rate.Every(m.rateLimitEvery), m.rateLimitBurst, m.rateLimitBufSize)
-		errrd = outRl
-		errwr = outRl
-		m.rlOutMetricsMap[fields["ContainerID"]] = outRl
-		m.rlErrMetricsMap[fields["ContainerID"]] = errRl
-
-	} else {
-		outrd, outwr = io.Pipe()
-		errrd, errwr = io.Pipe()
-	}
+	outrd, outwr := io.Pipe()
+	errrd, errwr := io.Pipe()
 
 	// Spin up one of these for each container we're watching.
 	go func() {
@@ -330,14 +282,14 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 			Stderr:       true,
 			Since:        since,
 			Timestamps:   false,
-			Tail:         "all",
+			Tail:         "0",
 			RawTerminal:  false,
 		})
 
 		// Once it has exited, close our pipes, remove from the sinces, and (if
 		// necessary) log the error.
-		//outwr.Close()
-		//errwr.Close()
+		outwr.Close()
+		errwr.Close()
 		m.sinceLock.Lock()
 		m.sinces.Containers[id] = time.Now().Unix()
 		m.sinceLock.Unlock()
@@ -346,6 +298,7 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 			m.ir.LogError(err)
 		}
 	}()
+
 	// Wait for success from the attachment
 	go m.handleOneStream("stdout", outrd, fields, id)
 	go m.handleOneStream("stderr", errrd, fields, id)
