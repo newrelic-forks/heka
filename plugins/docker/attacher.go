@@ -34,9 +34,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/newrelic-forks/go-dockerclient"
 	"github.com/mozilla-services/heka/message"
 	. "github.com/mozilla-services/heka/pipeline"
+	"github.com/newrelic-forks/go-dockerclient"
 	"github.com/pborman/uuid"
 )
 
@@ -282,7 +282,7 @@ func (m *AttachManager) attach(id string, client DockerClient) error {
 			Stderr:       true,
 			Since:        since,
 			Timestamps:   false,
-			Tail:         "all",
+			Tail:         "0",
 			RawTerminal:  false,
 		})
 

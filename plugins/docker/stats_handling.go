@@ -37,8 +37,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/newrelic-forks/go-dockerclient"
 	. "github.com/mozilla-services/heka/pipeline"
+	"github.com/newrelic-forks/go-dockerclient"
 )
 
 type DockerStat struct {
@@ -183,6 +183,7 @@ func (m *StatsManager) statsAttach(id string, client DockerClient) error {
 			Done:   done,
 		})
 
+		close(done)
 		if err != nil {
 			failure <- err
 		}
@@ -322,7 +323,10 @@ func NewStatsPump(statsChan chan *docker.Stats, name string, fields map[string]s
 	// from the channel
 	pump := func(sourceChan chan *docker.Stats, fields map[string]string) {
 		for {
-			source := <-sourceChan
+			source, ok := <-sourceChan
+			if !ok {
+				return
+			}
 			json_ver, _ := json.Marshal(source)
 			// Send a DockerStat struct out
 			obj.send(&DockerStat{
