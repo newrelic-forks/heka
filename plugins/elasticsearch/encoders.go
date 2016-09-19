@@ -33,6 +33,18 @@ import (
 const lowerhex = "0123456789abcdef"
 const NEWLINE byte = 10
 
+func nameSubstitute(name string, sub string) (cname string) {
+	buf := bytes.Buffer{}
+	for _, r := range name {
+		if r == '.' {
+			buf.WriteString(sub)
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
 func writeUTF16Escape(b *bytes.Buffer, c rune) {
 	b.WriteString(`\u`)
 	b.WriteByte(lowerhex[(c>>12)&0xF])
@@ -88,12 +100,16 @@ func writeQuotedString(b *bytes.Buffer, str string) {
 
 }
 
-func writeField(first bool, b *bytes.Buffer, f *message.Field, raw bool) {
+func writeField(first bool, b *bytes.Buffer, f *message.Field, raw bool, fieldNameSubstitute string) {
 	if !first {
 		b.WriteString(`,`)
 	}
 
-	writeQuotedString(b, f.GetName())
+	if fieldNameSubstitute != "" {
+		writeQuotedString(b, nameSubstitute(f.GetName(), fieldNameSubstitute))
+	} else {
+		writeQuotedString(b, f.GetName())
+	}
 	b.WriteString(`:`)
 
 	switch f.GetValueType() {
@@ -231,13 +247,14 @@ func inFieldChoices(field string) bool {
 // Manually encodes the Heka message into an ElasticSearch friendly way.
 type ESJsonEncoder struct {
 	// Field names to include in ElasticSearch document for "clean" format.
-	fields            []string
-	timestampFormat   string
-	rawBytesFields    []string
-	coord             *ElasticSearchCoordinates
-	fieldMappings     *ESFieldMappings
-	dynamicFields     []string
-	usesDynamicFields bool
+	fields              []string
+	timestampFormat     string
+	rawBytesFields      []string
+	coord               *ElasticSearchCoordinates
+	fieldMappings       *ESFieldMappings
+	dynamicFields       []string
+	usesDynamicFields   bool
+	fieldNameSubstitute string
 }
 
 // Heka fields to ElasticSearch mapping
@@ -275,15 +292,15 @@ type ESJsonEncoderConfig struct {
 	// Dynamic fields to be included. Non-empty value raises an error if
 	// 'DynamicFields' is not in Fields []string property.
 	DynamicFields []string `toml:"dynamic_fields"`
+	// Substitute field names' illegal characters
+	FieldNameSubstitute string `toml:"field_name_substitute"`
 }
 
 func (e *ESJsonEncoder) ConfigStruct() interface{} {
 	config := &ESJsonEncoderConfig{
-		Index:                "heka-%{%Y.%m.%d}",
-		TypeName:             "message",
-		Timestamp:            "%Y-%m-%dT%H:%M:%S",
-		ESIndexFromTimestamp: false,
-		Id:                   "",
+		Index:     "heka-%{%Y.%m.%d}",
+		TypeName:  "message",
+		Timestamp: "%Y-%m-%dT%H:%M:%S",
 		FieldMappings: &ESFieldMappings{
 			Timestamp:  "Timestamp",
 			Uuid:       "Uuid",
@@ -307,6 +324,7 @@ func (e *ESJsonEncoder) Init(config interface{}) (err error) {
 	e.fields = conf.Fields
 	e.timestampFormat = conf.Timestamp
 	e.rawBytesFields = conf.RawBytesFields
+	e.fieldNameSubstitute = conf.FieldNameSubstitute
 	e.coord = &ElasticSearchCoordinates{
 		Index:                conf.Index,
 		Type:                 conf.TypeName,
@@ -392,7 +410,7 @@ func (e *ESJsonEncoder) Encode(pack *PipelinePack) (output []byte, err error) {
 							}
 						}
 					}
-					writeField(first, &buf, field, raw)
+					writeField(first, &buf, field, raw, e.fieldNameSubstitute)
 				}
 			}
 		default:
@@ -410,12 +428,13 @@ func (e *ESJsonEncoder) Encode(pack *PipelinePack) (output []byte, err error) {
 // 1" schema, for compatibility with Kibana's out-of-box Logstash dashboards.
 type ESLogstashV0Encoder struct {
 	// Field names to include in ElasticSearch document for "clean" format.
-	fields          []string
-	timestampFormat string
-	rawBytesFields  []string
-	coord           *ElasticSearchCoordinates
-	dynamicFields   []string
-	useMessageType  bool
+	fields              []string
+	timestampFormat     string
+	rawBytesFields      []string
+	coord               *ElasticSearchCoordinates
+	dynamicFields       []string
+	useMessageType      bool
+	fieldNameSubstitute string
 }
 
 type ESLogstashV0EncoderConfig struct {
@@ -440,17 +459,16 @@ type ESLogstashV0EncoderConfig struct {
 	// Dynamic fields to be included. Non-empty value raises an error if
 	// 'DynamicFields' is not in Fields []string property.
 	DynamicFields []string `toml:"dynamic_fields"`
+	// Substitute field names' illegal characters
+	FieldNameSubstitute string `toml:"field_name_substitute"`
 }
 
 func (e *ESLogstashV0Encoder) ConfigStruct() interface{} {
 
 	config := &ESLogstashV0EncoderConfig{
-		Index:                "logstash-%{%Y.%m.%d}",
-		TypeName:             "message",
-		Timestamp:            "%Y-%m-%dT%H:%M:%S",
-		UseMessageType:       false,
-		ESIndexFromTimestamp: false,
-		Id:                   "",
+		Index:     "logstash-%{%Y.%m.%d}",
+		TypeName:  "message",
+		Timestamp: "%Y-%m-%dT%H:%M:%S",
 	}
 
 	config.Fields = fieldChoices[:]
@@ -464,6 +482,7 @@ func (e *ESLogstashV0Encoder) Init(config interface{}) (err error) {
 	e.fields = conf.Fields
 	e.timestampFormat = conf.Timestamp
 	e.useMessageType = conf.UseMessageType
+	e.fieldNameSubstitute = conf.FieldNameSubstitute
 	e.coord = &ElasticSearchCoordinates{
 		Index:                conf.Index,
 		Type:                 conf.TypeName,
@@ -563,7 +582,7 @@ func (e *ESLogstashV0Encoder) Encode(pack *PipelinePack) (output []byte, err err
 							}
 						}
 					}
-					writeField(firstfield, &buf, field, raw)
+					writeField(firstfield, &buf, field, raw, e.fieldNameSubstitute)
 					firstfield = false
 				}
 			}

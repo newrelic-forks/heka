@@ -80,7 +80,7 @@ func getTestMessageWithFunnyFields() *message.Message {
 	loc, _ := time.LoadLocation("UTC")
 	t, _ := time.ParseInLocation("2006-01-02T15:04:05", "2013-07-16T15:49:05",
 		loc)
-	fmt.Printf("%s %v \n", t)
+	fmt.Printf("%s \n", t)
 	msg.SetTimestamp(t.UnixNano())
 	msg.SetUuid(uuid.Parse("87cf1ac2-e810-4ddf-a02d-a5ce44d13a85"))
 	msg.SetLogger("GoSpec")
